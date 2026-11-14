@@ -14,6 +14,14 @@
 #include "esp_partition.h"
 #include "esp_attr.h"
 
+/* The original ESP32's PSRAM cache bug workaround around the cartridge RAM
+ * accesses (Xtensa only: other targets need no barrier here) */
+#if defined(__XTENSA__)
+#define SRAM_BARRIER() __asm__("nop\n\tnop\n\tnop\n\tnop\n\tmemw")
+#else
+#define SRAM_BARRIER() do { } while (0)
+#endif
+
 struct mbc mbc;
 struct rom rom;
 struct ram ram;
@@ -509,17 +517,9 @@ void mem_write(int a, byte b)
 			break;
 		}
 
-		__asm__("nop");
-		__asm__("nop");
-		__asm__("nop");
-		__asm__("nop");
-		__asm__("memw");
+		SRAM_BARRIER();
 		ram.sbank[mbc.rambank][a & 0x1FFF] = b;
-		__asm__("nop");
-		__asm__("nop");
-		__asm__("nop");
-		__asm__("nop");
-		__asm__("memw");
+		SRAM_BARRIER();
 
 		ram.sram_dirty = 1;
 		//printf("mem_write: bank=%d, sram %p=0x%d\n", mbc.rambank, (void*)(a & 0x1fff), b);
@@ -598,11 +598,7 @@ byte mem_read(int a)
 		if (rtc.sel&8)
 			return rtc.regs[rtc.sel&7];
 
-		__asm__("nop");
-		__asm__("nop");
-		__asm__("nop");
-		__asm__("nop");
-		__asm__("memw");
+		SRAM_BARRIER();
 		//printf("mem_read: bank=%d, sram %p=0x%d\n", mbc.rambank, (void*)(a & 0x1fff), ram.sbank[mbc.rambank][a & 0x1FFF]);
 		return ram.sbank[mbc.rambank][a & 0x1FFF];
 		case 0xC:
